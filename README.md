@@ -4,6 +4,10 @@
 
 <p align="center">macOS、Windows、iOS、Android 语音输入。桌面端按住或点按快捷键说话；iOS 是带语音的中文键盘；Android 不替换输入法，识别结果写进当前输入框。</p>
 
+> 本仓库是 [J3n5en/voicekey](https://github.com/J3n5en/voicekey) 基于 `v1.11.0` 的 macOS 增强分支，新增火山引擎官方豆包语音 2.0 渠道、钥匙串密钥保存，并优化豆包输入法渠道的输入延迟。原项目归属和声明保留。
+>
+> 新增能力已在 Apple 芯片 Mac 上验证。本分支目前提供源码；下方原项目的 Releases 安装包不包含本分支新增功能，可按“从源码构建”一节自行构建。
+
 <p align="center">
   <img src="docs/screenshots/pick-live.png" width="420" alt="候选框：说话时各渠道实时出字">
   <img src="docs/screenshots/pick-done.png" width="420" alt="候选框：定稿后选一条上屏">
