@@ -14,6 +14,7 @@ pub mod sogou;
 pub mod wetype;
 pub mod ifly;
 pub mod ws;
+pub mod volc;
 
 use anyhow::Result;
 use tokio::sync::mpsc;
@@ -39,3 +40,4 @@ pub use qwenapp::QwenAppEngine;
 pub use sogou::SogouEngine;
 pub use wetype::WeTypeEngine;
 pub use ifly::IflyEngine;
+pub use volc::VolcEngine;

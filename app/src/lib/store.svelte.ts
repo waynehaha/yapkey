@@ -1,4 +1,4 @@
-import { call, on, applyLook, type AppInfo, type Settings, type Perms, type Model, type Shortcut, type OfflineStatus, type Channel, type UpdateStatus } from "./api";
+import { call, on, applyLook, type AppInfo, type Settings, type Perms, type Model, type Shortcut, type OfflineStatus, type Channel, type UpdateStatus, type OfficialStatus } from "./api";
 
 export const app = $state({
   info: null as AppInfo | null,
@@ -11,6 +11,7 @@ export const app = $state({
   models: {} as Partial<Record<Channel, OfflineStatus>>,
   accounts: {} as Partial<Record<Channel, boolean>>,
   update: { state: "idle" } as UpdateStatus,
+  official: { configured: false, loading: true, error: null } as OfficialStatus,
 });
 
 export function save(patch: Partial<Settings>) {
@@ -24,6 +25,7 @@ export async function refreshPerms() {
 }
 
 let micRevision = 0;
+let officialRevision = 0;
 
 export async function refreshMics() {
   const revision = ++micRevision;
@@ -32,6 +34,11 @@ export async function refreshMics() {
 }
 
 export async function init() {
+  await on<OfficialStatus>("official-status", (status) => {
+    ++officialRevision;
+    app.official = status;
+  });
+  const revision = officialRevision;
   const info = await call<AppInfo>("get_state");
   app.info = info;
   app.s = info.settings;
@@ -39,6 +46,7 @@ export async function init() {
   app.models = info.models;
   app.accounts = info.accounts;
   app.update = info.update;
+  if (revision === officialRevision) app.official = info.official ?? { configured: false, loading: false, error: null };
   const look = () => app.s && applyLook(info.platform, app.s.theme);
   look();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", look);

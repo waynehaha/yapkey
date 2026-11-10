@@ -9,7 +9,8 @@
   const finals = new Map<string, string>();
 
   const m = $derived(app.compare);
-  const rows = $derived<Row[]>(m?.rows ?? app.info!.channels.filter((c) => c !== "all").map((c) => ({ channel: c, text: "", state: "skip", ms: null })));
+  const includesOfficial = $derived(app.s!.multi.includes("volc"));
+  const rows = $derived<Row[]>(m?.rows ?? app.info!.channels.filter((c) => c !== "all" && (c !== "volc" || includesOfficial)).map((c) => ({ channel: c, text: "", state: "skip", ms: null })));
   const recording = $derived(!!m?.recording);
   const waiting = $derived(rows.some((r) => r.state === "listen" || r.state === "wait"));
   const finished = $derived(rows.filter((r) => r.state === "final"));
@@ -55,7 +56,7 @@
     </button>
     <div class="info">
       <b>{!m ? "说一句话试试" : recording ? "正在聆听…" : waiting ? "各渠道定稿中…" : "对比完成"}</b>
-      <small>{!m ? "各渠道同时识别，录音不会保存" : recording ? "点击红色按钮结束" : waiting ? "条形长度表示定稿耗时" : best ? `${CH[best.channel].short} 最快，可设为默认` : "可重新录一句"}</small>
+      <small>{!m ? (includesOfficial ? "含火山官方，按实际语音用量计费" : "各渠道同时识别，录音不会保存") : recording ? "点击红色按钮结束" : waiting ? "条形长度表示定稿耗时" : best ? `${CH[best.channel].short} 最快，可设为默认` : "可重新录一句"}</small>
     </div>
     <div class="wave"><Wave level={recording ? app.level : 0} idle={!recording} height={36} /></div>
     <span class="time">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</span>

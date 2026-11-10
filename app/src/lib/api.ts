@@ -10,7 +10,7 @@ import chatterfly from "../assets/logos/chatterfly.png";
 import qwenapp from "../assets/logos/qwenapp.png";
 import bageshuo from "../assets/logos/bageshuo.png";
 
-export type Channel = "doubao" | "wetype" | "qwen" | "baidu" | "sogou" | "iflytek" | "chatterfly" | "qwenapp" | "bageshuo" | "offline" | "wetypeoffline" | "all";
+export type Channel = "doubao" | "volc" | "wetype" | "qwen" | "baidu" | "sogou" | "iflytek" | "chatterfly" | "qwenapp" | "bageshuo" | "offline" | "wetypeoffline" | "all";
 export interface Shortcut { code: number; mods: number; name: string }
 export interface Combo { codes: number[]; name: string }
 export interface JevConfig {
@@ -27,12 +27,14 @@ export interface Settings {
 }
 export interface OfflineStatus { state: "missing" | "downloading" | "ready" | "failed"; progress?: number; error?: string }
 export interface Perms { accessibility: boolean; mic: "granted" | "denied" | "undetermined" }
+export interface OfficialStatus { configured: boolean; loading: boolean; error: string | null }
 export interface UpdateStatus { state: "idle" | "checking" | "latest" | "available" | "downloading" | "error"; version?: string; progress?: number; error?: string }
 export interface AppInfo {
   settings: Settings; platform: "mac" | "win"; arch: string; version: string;
   holdKeys: { id: string; name: string }[]; channels: Channel[];
   offline: { supported: boolean }; models: Partial<Record<Channel, OfflineStatus>>; accounts: Partial<Record<Channel, boolean>>;
   perms: Perms; update: UpdateStatus;
+  official: OfficialStatus;
 }
 export type RowState = "listen" | "wait" | "final" | "error" | "skip";
 export interface Row { channel: Channel; text: string; state: RowState; ms: number | null }
@@ -47,6 +49,7 @@ export const on = <T>(name: string, f: (p: T) => void): Promise<UnlistenFn> => l
 
 export const CH: Record<Channel, { name: string; short: string; desc: string; tags: string[]; logo: string }> = {
   doubao: { name: "豆包输入法", short: "豆包", desc: "响应快、中英混说准确，适合日常输入。", tags: ["在线", "流式", "推荐"], logo: doubao },
+  volc: { name: "豆包语音（火山官方）", short: "火山官方", desc: "火山引擎豆包语音 2.0，使用自己的 API Key，按语音时长计费。", tags: ["官方 API", "流式", "按量计费"], logo: doubao },
   wetype: { name: "微信输入法", short: "微信", desc: "口语化表达识别稳定，数字自动规整。", tags: ["在线", "流式"], logo: wetype },
   qwen: { name: "千问输入法", short: "千问", desc: "千问输入法官方云端识别，中文流式出字。", tags: ["在线", "流式"], logo: qwen },
   baidu: { name: "百度输入法", short: "百度", desc: "百度输入法官方云端识别，中文流式出字。", tags: ["在线", "流式"], logo: baidu },

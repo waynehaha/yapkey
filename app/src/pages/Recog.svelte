@@ -5,6 +5,7 @@
   import Account from "./Account.svelte";
   import Compare from "./Compare.svelte";
   import Jev from "./Jev.svelte";
+  import Official from "./Official.svelte";
 
   const s = $derived(app.s!);
   const engines = $derived(app.info!.channels.filter((c) => c !== "all"));
@@ -44,6 +45,9 @@
       {#if LOGIN[c]}
         <div class="dl">{#if app.accounts[c]}<span class="ok">● 已登录</span>{:else}未登录{/if}</div>
       {/if}
+      {#if c === "volc"}
+        <div class="dl">{#if app.official.configured}<span class="ok">● 已配置密钥</span>{:else}需配置 API Key{/if}</div>
+      {/if}
     </button>
   {/each}
   <button class="ch" class:wide={engines.length % 2 === 0} class:on={s.channel === "all"} onclick={() => pick("all")}>
@@ -64,6 +68,7 @@
 </div>
 {#if s.channel === "all"}<Jev />{/if}
 {#if LOGIN[s.channel]}{#key s.channel}<Account ch={s.channel} />{/key}{/if}
+{#if s.channel === "volc" || (s.channel === "all" && s.multi.includes("volc"))}<Official />{/if}
 {#if !app.info!.offline.supported}
   <div class="note">ⓘ 豆包离线仅支持 Apple 芯片的 Mac，其他设备可使用微信离线。</div>
 {/if}

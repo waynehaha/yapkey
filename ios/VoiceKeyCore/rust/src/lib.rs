@@ -29,7 +29,7 @@ unsafe fn engine(name: *const c_char) -> Option<Box<dyn Engine>> {
         return None;
     }
     Some(match CStr::from_ptr(name).to_bytes() {
-        b"doubao" => Box::new(DoubaoEngine),
+        b"doubao" => Box::new(DoubaoEngine::default()),
         b"wetype" => Box::new(WeTypeEngine::default()),
         b"qwen" => Box::new(QwenEngine::default()),
         b"baidu" => Box::new(BaiduEngine),

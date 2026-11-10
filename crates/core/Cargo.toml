@@ -35,6 +35,13 @@ bytes = "1"
 [target.'cfg(target_os = "macos")'.dependencies]
 coreaudio-sys = "0.2"
 
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
 [[bin]]
 name = "vk-test"
 path = "src/bin/vk-test.rs"
+
+[[bin]]
+name = "vk-latency"
+path = "src/bin/vk-latency.rs"

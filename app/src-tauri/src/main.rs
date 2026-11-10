@@ -4,6 +4,7 @@ mod controller;
 mod hotkey;
 mod login;
 mod offline;
+mod official;
 mod settings;
 mod sound;
 mod ui;
@@ -27,6 +28,7 @@ pub struct AppState {
     pub hk: Arc<Shared>,
     pub tx: UnboundedSender<Msg>,
     pub qwen: Arc<QwenEngine>,
+    pub official: Arc<official::State>,
 }
 
 fn apply<R: Runtime>(app: &AppHandle<R>, s: &Settings) {
@@ -76,7 +78,10 @@ pub fn model_ready(ch: Channel) -> bool {
 }
 
 /// 多渠道识别时要跳过的渠道及原因
-pub fn unavailable(ch: Channel) -> Option<&'static str> {
+pub fn unavailable(app: &AppHandle, ch: Channel) -> Option<&'static str> {
+    if ch == Channel::Volc && !app.state::<AppState>().official.engine.configured() {
+        return Some("火山官方密钥未配置，已跳过");
+    }
     if !model_ready(ch) {
         return Some("离线模型未下载，已跳过");
     }
@@ -133,6 +138,7 @@ fn get_state(app: AppHandle) -> serde_json::Value {
         "offline": { "supported": offline::SUPPORTED },
         "models": { "offline": offline::status(), "wetypeoffline": wtoffline::status() },
         "accounts": login::status(),
+        "official": app.state::<AppState>().official.status(),
         "perms": perms(),
         "update": update::status(),
     })
@@ -285,6 +291,9 @@ async fn jev_test(config: voicekey_core::jev::Config) -> Result<voicekey_core::j
 }
 
 fn main() {
+    if let Some(code) = official::smoke_main() {
+        std::process::exit(code);
+    }
     if let Some(code) = offline::worker_main() {
         std::process::exit(code);
     }
@@ -298,7 +307,8 @@ fn main() {
             get_state, set_settings, perm_status, perm_action, microphones, record_shortcut,
             pick_choose, pick_key, pick_resize, compare_toggle, meter, open_url, model_download,
             update_check, update_install, jev_test, preview_sound, list_sounds,
-            account_save, account_login, account_logout
+            account_save, account_login, account_logout,
+            official::official_save_key, official::official_clear_key
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
@@ -306,7 +316,7 @@ fn main() {
             let (tx, rx) = mpsc::unbounded_channel();
             let qwen = Arc::new(QwenEngine::default());
             let hk = Arc::new(Shared::default());
-            app.manage(AppState { settings: Arc::new(RwLock::new(settings.clone())), hk: hk.clone(), tx: tx.clone(), qwen: qwen.clone() });
+            app.manage(AppState { settings: Arc::new(RwLock::new(settings.clone())), hk: hk.clone(), tx: tx.clone(), qwen: qwen.clone(), official: Arc::new(official::State::default()) });
 
             let (htx, mut hrx) = mpsc::unbounded_channel();
             hotkey::start(hk, htx);
@@ -316,6 +326,7 @@ fn main() {
                 }
             });
             let handle = app.handle().clone();
+            official::initialize(handle.clone());
             controller::spawn(handle.clone(), qwen, rx);
             let audio_tx = handle.state::<AppState>().tx.clone();
             voicekey_core::audio::watch_microphones(move |mics| {

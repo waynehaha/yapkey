@@ -106,6 +106,7 @@ fn avx2() -> bool {
 mod neon {
     use std::arch::aarch64::*;
 
+    #[target_feature(enable = "dotprod")]
     pub unsafe fn dot2x4(x: [*const i8; 2], w: [*const i8; 4], k: usize) -> [[i32; 4]; 2] {
         let mut a = [vdupq_n_s32(0); 8];
         let mut i = 0;
@@ -114,8 +115,20 @@ mod neon {
             let x1 = vld1q_s8(x[1].add(i));
             for b in 0..4 {
                 let wv = vld1q_s8(w[b].add(i));
-                a[b] = vdotq_s32(a[b], x0, wv);
-                a[4 + b] = vdotq_s32(a[4 + b], x1, wv);
+                let mut first = a[b];
+                let mut second = a[4 + b];
+                std::arch::asm!(
+                    "sdot {first:v}.4s, {x0:v}.16b, {weights:v}.16b",
+                    "sdot {second:v}.4s, {x1:v}.16b, {weights:v}.16b",
+                    first = inout(vreg) first,
+                    second = inout(vreg) second,
+                    x0 = in(vreg) x0,
+                    x1 = in(vreg) x1,
+                    weights = in(vreg) wv,
+                    options(pure, nomem, nostack),
+                );
+                a[b] = first;
+                a[4 + b] = second;
             }
             i += 16;
         }
@@ -185,6 +198,29 @@ pub fn dotf(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn neon_matches_signed_scalar() {
+        for k in [16, 32, 64, 256] {
+            let x: Vec<i8> = (0..2 * k).map(|i| (i * 71 + 128) as i8).collect();
+            let w: Vec<i8> = (0..4 * k).map(|i| (i * 37 + 127) as i8).collect();
+            for xr in 1..=2 {
+                for wr in 1..=4 {
+                    let actual = dot(&x, xr, &w, wr, k);
+                    for a in 0..xr {
+                        for b in 0..wr {
+                            let expected: i32 = x[a * k..(a + 1) * k].iter()
+                                .zip(&w[b * k..(b + 1) * k])
+                                .map(|(&x, &w)| x as i32 * w as i32)
+                                .sum();
+                            assert_eq!(actual[a][b], expected, "k={k}, row={a}, col={b}");
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn qgemm_matches_scalar() {

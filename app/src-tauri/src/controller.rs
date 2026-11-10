@@ -246,7 +246,8 @@ pub fn spawn(app: AppHandle, qwen: Arc<QwenEngine>, rx: UnboundedReceiver<Msg>) 
     let st = app.state::<AppState>();
     let volume_fraction = st.settings.read().unwrap().retained_system_volume_fraction();
     let mut engines: HashMap<Channel, Arc<dyn Engine>> = HashMap::new();
-    engines.insert(Channel::Doubao, Arc::new(DoubaoEngine));
+    engines.insert(Channel::Doubao, Arc::new(DoubaoEngine::default()));
+    engines.insert(Channel::Volc, st.official.engine.clone());
     engines.insert(Channel::Wetype, Arc::new(WeTypeEngine::default()));
     engines.insert(Channel::Qwen, qwen);
     engines.insert(Channel::Baidu, Arc::new(BaiduEngine));
@@ -365,7 +366,7 @@ impl Ctl {
             Msg::PickKey(k) if self.mode == Mode::Pick => self.pick_key(k),
             Msg::CompareToggle => match self.mode {
                 Mode::Compare if self.recording => self.end(),
-                Mode::Idle => self.begin_multi(Mode::Compare, Channel::engines(), false),
+                Mode::Idle => self.begin_multi(Mode::Compare, self.settings().comparison_channels(), false),
                 _ => {}
             },
             Msg::CompareStop if self.mode == Mode::Compare => self.abort(None),
@@ -728,7 +729,7 @@ impl Ctl {
         self.rows = channels
             .into_iter()
             .map(|ch| {
-                let skip = crate::unavailable(ch);
+                let skip = crate::unavailable(&self.app, ch);
                 Row {
                     channel: ch,
                     text: skip.unwrap_or_default().into(),

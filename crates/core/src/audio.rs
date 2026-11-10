@@ -11,73 +11,9 @@ mod devices;
 pub use devices::watch_microphones;
 
 pub const FRAME: usize = 320;
-/// 语音前垫的静音，给服务端 VAD 起音
-const LEAD: usize = 10;
-
-/// 先送 200ms 静音，之后最快 20ms 一帧。握手期间积压的音频留在上游，不会一次性灌出去
-pub struct Lead {
-    rx: mpsc::Receiver<Vec<i16>>,
-}
-
-impl Lead {
-    pub async fn recv(&mut self) -> Option<Vec<i16>> {
-        self.rx.recv().await
-    }
-}
-
-#[cfg(test)]
-mod lead_tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn lead_pads_silence_then_plays_realtime() {
-        let (tx, rx) = mpsc::unbounded_channel();
-        for i in 0..5 {
-            tx.send(vec![i; FRAME]).unwrap();
-        }
-        drop(tx);
-        let mut live = lead(rx);
-        let started = std::time::Instant::now();
-        let mut got = Vec::new();
-        while let Some(frame) = live.recv().await {
-            got.push(frame[0]);
-        }
-        assert_eq!(got, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]);
-        assert!(started.elapsed() >= std::time::Duration::from_millis(200));
-    }
-}
-
-pub fn lead(mut audio: Audio) -> Lead {
-    let (tx, rx) = mpsc::channel(1);
-    tokio::spawn(async move {
-        let mut next = tokio::time::Instant::now();
-        for _ in 0..LEAD {
-            if !emit(&tx, vec![0; FRAME], &mut next).await {
-                return;
-            }
-        }
-        while let Some(frame) = audio.recv().await {
-            if !emit(&tx, frame, &mut next).await {
-                return;
-            }
-        }
-    });
-    Lead { rx }
-}
-
-async fn emit(tx: &mpsc::Sender<Vec<i16>>, frame: Vec<i16>, next: &mut tokio::time::Instant) -> bool {
-    let now = tokio::time::Instant::now();
-    if *next > now {
-        tokio::time::sleep_until(*next).await;
-    } else {
-        *next = now;
-    }
-    if tx.send(frame).await.is_err() {
-        return false;
-    }
-    *next += tokio::time::Duration::from_millis(20);
-    true
-}
+mod pacing;
+pub use pacing::{lead, Lead};
+pub(crate) use pacing::lead_catchup;
 
 /// 任意采样率的单声道 f32 → 16kHz Int16，按 20ms 切帧
 pub struct Framer {

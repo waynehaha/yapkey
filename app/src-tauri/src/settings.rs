@@ -8,6 +8,7 @@ use voicekey_core::util::data_file;
 pub enum Channel {
     #[default]
     Doubao,
+    Volc,
     Wetype,
     Qwen,
     Baidu,
@@ -25,6 +26,7 @@ impl Channel {
     pub fn title(self) -> &'static str {
         match self {
             Channel::Doubao => "豆包输入法",
+            Channel::Volc => "豆包语音（火山官方）",
             Channel::Wetype => "微信输入法",
             Channel::Qwen => "千问输入法",
             Channel::Baidu => "百度输入法",
@@ -51,6 +53,9 @@ impl Channel {
     /// 当前平台可用的识别渠道（不含「全部」）
     pub fn engines() -> Vec<Channel> {
         let mut v = vec![Channel::Doubao, Channel::Wetype, Channel::Qwen, Channel::Baidu, Channel::Sogou, Channel::Iflytek, Channel::Chatterfly, Channel::QwenApp, Channel::Bageshuo];
+        if cfg!(target_os = "macos") {
+            v.insert(1, Channel::Volc);
+        }
         if crate::offline::SUPPORTED {
             v.push(Channel::Offline);
         }
@@ -62,6 +67,10 @@ impl Channel {
         let mut v = Self::engines();
         v.push(Channel::All);
         v
+    }
+
+    pub fn automatic() -> Vec<Channel> {
+        Self::engines().into_iter().filter(|&channel| channel != Channel::Volc).collect()
     }
 }
 
@@ -152,7 +161,7 @@ impl Default for Settings {
             streaming: true,
             live_text: true,
             mic: String::new(),
-            multi: Channel::engines().into_iter().filter(|&c| c != Channel::WetypeOffline && c.login().is_none()).collect(),
+            multi: Channel::automatic().into_iter().filter(|&c| c != Channel::WetypeOffline && c.login().is_none()).collect(),
             last_pick: None,
             pick_counts: HashMap::new(),
             sound_enabled: false,
@@ -216,7 +225,7 @@ impl Settings {
         let engines = Channel::engines();
         let mut multi: Vec<Channel> = engines.iter().copied().filter(|c| self.multi.contains(c)).collect();
         if multi.len() < 2 {
-            multi = engines;
+            multi = Channel::automatic();
         }
         self.multi = multi;
     }
@@ -226,6 +235,10 @@ impl Settings {
             Some(c) if self.hold_key == CUSTOM_HOLD => c.codes.clone(),
             _ => voicekey_platform::hold_keys().iter().filter(|k| k.id == self.hold_key).map(|k| k.code).collect(),
         }
+    }
+
+    pub fn comparison_channels(&self) -> Vec<Channel> {
+        Channel::engines().into_iter().filter(|&channel| channel != Channel::Volc || self.multi.contains(&channel)).collect()
     }
 
     pub fn hold_name(&self) -> String {
@@ -244,6 +257,32 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn official_channel_is_never_automatically_used_for_paid_recognition() {
+        let mut settings = Settings::default();
+        assert!(!settings.multi.contains(&Channel::Volc));
+        assert!(!settings.comparison_channels().contains(&Channel::Volc));
+        settings.multi.clear();
+        settings.sanitize();
+        assert!(!settings.multi.contains(&Channel::Volc));
+        assert!(!settings.comparison_channels().contains(&Channel::Volc));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn explicitly_selected_official_channel_survives_save_and_can_join_comparisons() {
+        let mut settings = Settings::default();
+        settings.channel = Channel::Volc;
+        settings.multi.push(Channel::Volc);
+        let encoded = serde_json::to_string(&settings).unwrap();
+        let mut loaded: Settings = serde_json::from_str(&encoded).unwrap();
+        loaded.sanitize();
+        assert_eq!(loaded.channel, Channel::Volc);
+        assert!(loaded.multi.contains(&Channel::Volc));
+        assert!(loaded.comparison_channels().contains(&Channel::Volc));
+        assert!(!encoded.contains("apiKey"));
+    }
 
     #[test]
     fn legacy_jev_selection_defaults_and_new_values_are_sanitized() {

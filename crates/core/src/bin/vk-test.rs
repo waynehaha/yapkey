@@ -19,7 +19,7 @@ async fn main() {
         "qwen" => Box::new(QwenEngine::default()),
         "qwenapp" => Box::new(QwenAppEngine::default()),
         "bageshuo" => Box::new(BageshuoEngine),
-        _ => Box::new(DoubaoEngine),
+        _ => Box::new(DoubaoEngine::default()),
     };
     let start = Instant::now();
     let audio = audio::file_frames(&args[2], true).expect("read wav");

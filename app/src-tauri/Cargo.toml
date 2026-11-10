@@ -29,6 +29,7 @@ hex = "0.4"
 base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
 objc2 = "0.6"
 # 会话提示音（NSSound，与 cometix-dictation 同源；仅启用所需特性控制编译面）
 objc2-app-kit = { version = "0.3", features = ["NSSound"] }

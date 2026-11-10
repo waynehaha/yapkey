@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 
+mod connection;
+
 const WS_URL: &str = "wss://frontier-audio-ime-ws.doubao.com/ocean/api/v1/ws";
 const OK: i64 = 20_000_000;
 /// 官方客户端内置 ASR app key（1.4.6 IAsr.b()）；settings 下发的 app_key 已被部分设备拒绝（service discovery failure）
@@ -22,7 +24,9 @@ const LAST: u64 = 9;
 
 /// 豆包输入法流式识别：asr.AsrRequest protobuf over WSS，Opus 20ms 帧
 #[derive(Default)]
-pub struct DoubaoEngine;
+pub struct DoubaoEngine {
+    connection: connection::Pool,
+}
 
 fn request(token: &str, method: &str, payload: &str, audio: &[u8], rid: &str, frame: u64) -> Message {
     let mut pb = PBuf::new();
@@ -113,6 +117,10 @@ impl Transcript {
 
 #[async_trait::async_trait]
 impl Engine for DoubaoEngine {
+    async fn prewarm(&self) {
+        self.connection.prewarm().await;
+    }
+
     async fn run(&self, mut audio: Audio, partial: Partial) -> Result<String> {
         // 录音同时留底：服务端拒绝当前设备（SessionFailed 且无结果）时换新设备重放一次
         let (ftx, frx) = tokio::sync::mpsc::unbounded_channel();
@@ -125,9 +133,10 @@ impl Engine for DoubaoEngine {
             }
         }));
         let partial: Arc<Partial> = Arc::new(partial);
-        match session(frx, partial.clone()).await {
+        match session(&self.connection, frx, partial.clone()).await {
             Err(Fail::Rejected(e)) => {
                 DoubaoDevice::reset();
+                self.connection.clear();
                 let (rtx, rrx) = tokio::sync::mpsc::unbounded_channel();
                 let frames = std::mem::take(&mut *kept.lock().unwrap());
                 // 4 倍速回放，一次性灌入会被服务端拒绝
@@ -139,7 +148,7 @@ impl Engine for DoubaoEngine {
                         tokio::time::sleep(Duration::from_millis(5)).await;
                     }
                 }));
-                session(rrx, partial).await.map_err(|r| {
+                session(&self.connection, rrx, partial).await.map_err(|r| {
                     DoubaoDevice::reset();
                     anyhow!("{e}；换设备重试：{}", r.into_inner())
                 })
@@ -167,34 +176,19 @@ impl<E: Into<anyhow::Error>> From<E> for Fail {
     }
 }
 
-async fn session(audio: Audio, partial: Arc<Partial>) -> std::result::Result<String, Fail> {
+async fn session(pool: &connection::Pool, audio: Audio, partial: Arc<Partial>) -> std::result::Result<String, Fail> {
     {
-        let mut audio = audio::lead(audio);
-        let device = DoubaoDevice::load().await?;
-        let rid = uuid::Uuid::new_v4().to_string();
-        let url = format!("{WS_URL}?aid=401734&device_id={}", device.did);
-        let ua = device.phone.ua();
-        let ws = ws::connect(&url, &[("User-Agent", &ua), ("proto-version", "v2"), ("x-custom-keepalive", "true")]).await?;
-        let (mut tx, mut rx) = ws.split();
-
-        let session = json!({
-            "audio_info": {"channel": 1, "format": "speech_opus", "sample_rate": 16000},
-            "enable_punctuation": true,
-            "enable_speech_rejection": true,
-            "extra": {"app_name": "oime", "cell_compress_rate": 8, "did": device.did,
-                      "enable_asr_threepass": false, "enable_asr_twopass": true, "input_mode": "stream"},
-        })
-        .to_string();
-        let handshake = async {
-            tx.send(request(APP_KEY, "StartTask", "", &[], &rid, 0)).await?;
-            expect(&mut rx, "TaskStarted").await?;
-            tx.send(request(APP_KEY, "StartSession", &session, &[], &rid, 0)).await?;
-            expect(&mut rx, "SessionStarted").await
+        let mut audio = audio::lead_catchup(audio);
+        let connection = match pool.start().await {
+            Ok(connection) => connection,
+            Err(error) => {
+                DoubaoDevice::reset();
+                pool.clear();
+                return Err(error.into());
+            }
         };
-        if let Err(e) = handshake.await {
-            DoubaoDevice::reset();
-            return Err(e.into());
-        }
+        let rid = connection.rid;
+        let (mut tx, mut rx) = connection.ws.split();
 
         let transcript = Arc::new(Mutex::new(Transcript::default()));
         let t = transcript.clone();

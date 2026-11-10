@@ -40,7 +40,7 @@ fn wtoffline_dir() -> PathBuf {
 
 fn engine(name: &str) -> Option<Box<dyn Engine>> {
     Some(match name {
-        "doubao" => Box::new(DoubaoEngine),
+        "doubao" => Box::new(DoubaoEngine::default()),
         "wetype" => Box::new(WeTypeEngine::default()),
         "qwen" => Box::new(QwenEngine::default()),
         "baidu" => Box::new(BaiduEngine),
